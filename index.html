@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>画面録画</title>
+<style>
+  body { font-family: sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+  button { font-size: 1rem; padding: .6rem 1.2rem; margin-right: .5rem; cursor: pointer; }
+  video { width: 100%; margin-top: 1rem; background: #000; }
+  #status { margin: 1rem 0; color: #555; }
+</style>
+</head>
+<body>
+  <h1>画面録画</h1>
+  <label><input type="checkbox" id="audio"> 音声も録音する(システム音声/マイク)</label>
+  <p>
+    <button id="start">録画開始</button>
+    <button id="stop" disabled>停止</button>
+    <a id="download" style="display:none">ダウンロード</a>
+  </p>
+  <div id="status">待機中</div>
+  <video id="preview" controls></video>
+
+<script>
+  const $ = id => document.getElementById(id);
+  let recorder, chunks = [], stream;
+
+  $('start').onclick = async () => {
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: $('audio').checked
+      });
+    } catch (e) {
+      $('status').textContent = 'キャンセル、または許可されませんでした: ' + e.message;
+      return;
+    }
+    chunks = [];
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = e => e.data.size && chunks.push(e.data);
+    recorder.onstop = () => {
+      const blob = new Blob(chunks, { type: recorder.mimeType });
+      const url = URL.createObjectURL(blob);
+      $('preview').srcObject = null;
+      $('preview').src = url;
+      const a = $('download');
+      a.href = url;
+      a.download = 'recording-' + Date.now() + '.webm';
+      a.textContent = 'ダウンロード (.webm)';
+      a.style.display = 'inline';
+      $('status').textContent = '録画完了';
+      $('start').disabled = false;
+      $('stop').disabled = true;
+    };
+    // ブラウザ側の「共有を停止」ボタンでも終了させる
+    stream.getVideoTracks()[0].onended = () => recorder.state !== 'inactive' && recorder.stop();
+
+    recorder.start();
+    $('preview').src = '';
+    $('preview').srcObject = stream;
+    $('preview').muted = true;
+    $('preview').play();
+    $('download').style.display = 'none';
+    $('status').textContent = '録画中…';
+    $('start').disabled = true;
+    $('stop').disabled = false;
+  };
+
+  $('stop').onclick = () => {
+    recorder.stop();
+    stream.getTracks().forEach(t => t.stop());
+  };
+</script>
+</body>
+</html>
